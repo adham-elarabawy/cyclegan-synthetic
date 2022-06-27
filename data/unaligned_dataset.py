@@ -3,8 +3,19 @@ from data.base_dataset import BaseDataset, get_transform
 from data.image_folder import make_dataset
 from PIL import Image
 import random
+import torchvision.transforms as transforms
+import numpy as np
 
+def expand(selection, radius):
+    cop = np.copy(selection)
+    for x in range(-radius,radius+1):
+        for y in range(-radius,radius+1):
+            if (y==0 and x==0) or (x**2 + y**2 > radius **2):
+                continue
+            shift = np.roll(np.roll(selection, y, axis = 0), x, axis = 1)
+            cop += shift
 
+    return cop
 class UnalignedDataset(BaseDataset):
     """
     This dataset class can load unaligned/unpaired datasets.
@@ -23,11 +34,15 @@ class UnalignedDataset(BaseDataset):
             opt (Option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         BaseDataset.__init__(self, opt)
+        self.bg_dc = opt.bg_dc
+        self.expand_radius = opt.bg_dc_expand_radius
+
         self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')  # create a path '/path/to/data/trainA'
         self.dir_B = os.path.join(opt.dataroot, opt.phase + 'B')  # create a path '/path/to/data/trainB'
 
-        self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))   # load images from '/path/to/data/trainA'
+        self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))    # load images from '/path/to/data/trainA'
         self.B_paths = sorted(make_dataset(self.dir_B, opt.max_dataset_size))    # load images from '/path/to/data/trainB'
+
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
         btoA = self.opt.direction == 'BtoA'
@@ -35,6 +50,13 @@ class UnalignedDataset(BaseDataset):
         output_nc = self.opt.input_nc if btoA else self.opt.output_nc      # get the number of channels of output image
         self.transform_A = get_transform(self.opt, grayscale=(input_nc == 1))
         self.transform_B = get_transform(self.opt, grayscale=(output_nc == 1))
+
+        if self.bg_dc == 'loss':
+            self.dir_mask_A = os.path.join(opt.dataroot, 'maskA') # create a path '/path/to/data/maskA'
+            self.mask_A_paths = sorted(make_dataset(self.dir_mask_A, opt.max_dataset_size))  # load images from '/path/to/data/maskA'
+            self.mask_A_size = len(self.mask_A_paths)
+            assert(self.mask_A_size == self.A_size)
+            self.transform_mask_A = transforms.Compose([self.transform_A, transforms.GaussianBlur(opt.bg_dc_kernel_size, opt.bg_dc_sigma)])
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
@@ -59,6 +81,21 @@ class UnalignedDataset(BaseDataset):
         # apply image transformation
         A = self.transform_A(A_img)
         B = self.transform_B(B_img)
+
+        if self.bg_dc == 'loss':
+            # get indexed mask path
+            mask_A_path = self.mask_A_paths[index % self.mask_A_size]
+            # load mask into PIL Image
+            mask_A = Image.open(mask_A_path).convert('RGB')
+            # expand mask by param radius to compensate for blurring
+            if self.expand_radius > 0:
+                mask_A = expand(mask_A, self.expand_radius)
+                mask_A = Image.fromarray(mask_A)
+            # apply image transformation to match transform_A and add gaussian blur
+            mask_A = 255 - self.transform_mask_A(mask_A)
+            
+            return {'A': A, 'B': B, 'mask_A': mask_A, 'A_paths': A_path, 'B_paths': B_path, 'mask_A_path': mask_A_path}
+
 
         return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
 
