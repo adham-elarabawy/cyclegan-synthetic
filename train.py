@@ -67,7 +67,7 @@ if __name__ == '__main__':
                     img_path = os.path.join(img_dir, 'epoch%.3d_%s.png' % (epoch, label))
                     util.save_image(image_numpy, img_path)
                     writer.add_image(f'train/{label}', image_numpy, global_step=epoch, dataformats='HWC')
-                    
+
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
@@ -76,14 +76,13 @@ if __name__ == '__main__':
                 log_message = '(epoch: %d, iters: %d, time: %.3f, data: %.3f) ' % (epoch, epoch_iter, t_comp, t_data)
                 for k, v in losses.items():
                     log_message += '%s: %.3f ' % (k, v)
-                    # writer.add_scalar(f'{k}', v, total_iters)   
                 # save training losses to tensorboard    
                 writer.add_scalars('train', losses, total_iters)
                 print(log_message)  # print the message
 
             if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations
                 print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
-                save_suffix = 'iter_%d' % total_iters if opt.save_by_iter else 'latest'
+                save_suffix = 'latest'
                 model.save_networks(save_suffix)
 
             iter_data_time = time.time()
