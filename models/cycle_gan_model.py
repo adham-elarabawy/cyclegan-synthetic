@@ -51,29 +51,39 @@ class CycleGANModel(BaseModel):
             opt (Option class)-- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         BaseModel.__init__(self, opt)
-        self.bg_dc = opt.bg_dc
+        self.bg_dc = opt.bg_dc.split('_')
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
-        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B', 'bg_dc']
+        self.loss_names = ['D_A', 'G_A', 'cycle_A', 'idt_A', 'D_B', 'G_B', 'cycle_B', 'idt_B']
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
-        visual_names_A = ['real_A', 'fake_B', 'rec_A', 'mask_A']
+        visual_names_A = ['real_A', 'fake_B', 'rec_A']
         visual_names_B = ['real_B', 'fake_A', 'rec_B']
         if self.isTrain and self.opt.lambda_identity > 0.0:  # if identity loss is used, we also visualize idt_B=G_A(B) ad idt_A=G_A(B)
             visual_names_A.append('idt_B')
             visual_names_B.append('idt_A')
 
-        self.visual_names = visual_names_A + visual_names_B  # combine visualizations for A and B
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>.
         if self.isTrain:
             self.model_names = ['G_A', 'G_B', 'D_A', 'D_B']
         else:  # during test time, only load Gs
             self.model_names = ['G_A', 'G_B']
 
+        if 'loss' in self.bg_dc:
+            self.loss_names.append('bg_dc')
+            visual_names_A.append('mask_A_processed')
+
+        if 'encoding' in self.bg_dc:
+            self.input_nc = opt.input_nc + 1
+            self.output_nc = opt.output_nc
+            visual_names_A.append('mask_A')
+
+        self.visual_names = visual_names_A + visual_names_B  # combine visualizations for A and B
+
         # define networks (both Generators and discriminators)
         # The naming is different from those used in the paper.
         # Code (vs. paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
-        self.netG_A = networks.define_G(opt.input_nc, opt.output_nc, opt.ngf, opt.netG, opt.norm,
+        self.netG_A = networks.define_G(self.input_nc, self.output_nc, opt.ngf, opt.netG, opt.norm,
                                         not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
-        self.netG_B = networks.define_G(opt.output_nc, opt.input_nc, opt.ngf, opt.netG, opt.norm,
+        self.netG_B = networks.define_G(self.output_nc, self.input_nc, opt.ngf, opt.netG, opt.norm,
                                         not opt.no_dropout, opt.init_type, opt.init_gain, self.gpu_ids)
 
         if self.isTrain:  # define discriminators
@@ -91,7 +101,7 @@ class CycleGANModel(BaseModel):
             self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)  # define GAN loss.
             self.criterionCycle = torch.nn.L1Loss()
             self.criterionIdt = torch.nn.L1Loss()
-            if self.bg_dc:
+            if 'loss' in self.bg_dc:
                 if opt.bg_dc_loss_type == 'L1':
                     self.criterion_BG_DC = torch.nn.L1Loss(reduction='none')
                 elif opt.bg_dc_loss_type == 'L2': 
@@ -116,7 +126,9 @@ class CycleGANModel(BaseModel):
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
-        if self.bg_dc == 'loss':
+        if 'loss' in self.bg_dc:
+            self.mask_A_processed = input['mask_A_processed'].to(self.device)
+        if 'encoding' in self.bg_dc:
             self.mask_A = input['mask_A'].to(self.device)
 
     def forward(self):
@@ -184,8 +196,8 @@ class CycleGANModel(BaseModel):
         # Backward cycle loss || G_A(G_B(B)) - B||
         self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
         # Background Data Consistency Loss
-        if self.bg_dc == 'loss':
-            self.loss_bg_dc = self.criterion_BG_DC(self.fake_B, self.real_A) * self.mask_A
+        if 'loss' in self.bg_dc:
+            self.loss_bg_dc = self.criterion_BG_DC(self.fake_B, self.real_A) * self.mask_A_processed
             self.loss_bg_dc = torch.mean(self.loss_bg_dc)
         else:
             self.loss_bg_dc = 0

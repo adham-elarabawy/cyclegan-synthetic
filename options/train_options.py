@@ -30,7 +30,7 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--lr_policy', type=str, default='linear', help='learning rate policy. [linear | step | plateau | cosine]')
         parser.add_argument('--lr_decay_iters', type=int, default=50, help='multiply by a gamma every lr_decay_iters iterations')
         # specialized loss parameters
-        parser.add_argument('--bg_dc', type=str, default='none', help='type of background data-consistency. [loss | loss_and_encoding | none]')
+        parser.add_argument('--bg_dc', type=str, default='none', help='type of background data-consistency. [loss | encoding | loss_and_encoding | none]')
         parser.add_argument('--bg_dc_kernel_size', type=int, default=5, help='size of the gaussian kernel used to blur the synthetic pedestrian mask to simulate decaying data consistency.')
         parser.add_argument('--bg_dc_sigma', type=float, default=2.0, help='standard deviation used to create gaussian kernel used to blur the synthetic pedestrian mask to simulate decaying data consistency.')
         parser.add_argument('--bg_dc_expand_radius', type=int, default=3, help='how many pixels to expand the seg masks by before applying the gaussian filter used to blur the synth ped mask to simulate decaying data consistency.')

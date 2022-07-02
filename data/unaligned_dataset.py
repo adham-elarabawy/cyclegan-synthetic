@@ -5,6 +5,7 @@ from PIL import Image
 import random
 import torchvision.transforms as transforms
 import numpy as np
+import torch
 
 def expand(selection, radius):
     cop = np.copy(selection)
@@ -34,7 +35,7 @@ class UnalignedDataset(BaseDataset):
             opt (Option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         BaseDataset.__init__(self, opt)
-        self.bg_dc = opt.bg_dc
+        self.bg_dc = opt.bg_dc.split('_')
         self.expand_radius = opt.bg_dc_expand_radius
 
         self.dir_A = os.path.join(opt.dataroot, opt.phase + 'A')  # create a path '/path/to/data/trainA'
@@ -50,13 +51,17 @@ class UnalignedDataset(BaseDataset):
         output_nc = self.opt.input_nc if btoA else self.opt.output_nc      # get the number of channels of output image
         self.transform_A = get_transform(self.opt, grayscale=(input_nc == 1))
         self.transform_B = get_transform(self.opt, grayscale=(output_nc == 1))
+        self.transform_mask = get_transform(self.opt, grayscale=True, convert=True, normalize=False)
 
-        if self.bg_dc == 'loss':
+        if len(self.bg_dc) > 0:
             self.dir_mask_A = os.path.join(opt.dataroot, 'maskA') # create a path '/path/to/data/maskA'
             self.mask_A_paths = sorted(make_dataset(self.dir_mask_A, opt.max_dataset_size))  # load images from '/path/to/data/maskA'
             self.mask_A_size = len(self.mask_A_paths)
             assert(self.mask_A_size == self.A_size)
-            self.transform_mask_A = transforms.Compose([self.transform_A, transforms.GaussianBlur(opt.bg_dc_kernel_size, opt.bg_dc_sigma)])
+        if 'loss' in self.bg_dc:
+            self.transform_mask_A_to_blurred = transforms.Compose([self.transform_mask, transforms.GaussianBlur(opt.bg_dc_kernel_size, opt.bg_dc_sigma)])
+        if 'encoding' in self.bg_dc:
+            self.transform_mask_A_base = self.transform_mask
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
@@ -82,23 +87,29 @@ class UnalignedDataset(BaseDataset):
         A = self.transform_A(A_img)
         B = self.transform_B(B_img)
 
-        if self.bg_dc == 'loss':
+        output = {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
+
+        if len(self.bg_dc) > 0:
             # get indexed mask path
             mask_A_path = self.mask_A_paths[index % self.mask_A_size]
             # load mask into PIL Image
             mask_A = Image.open(mask_A_path).convert('RGB')
+
+        if 'loss' in self.bg_dc:
             # expand mask by param radius to compensate for blurring
             if self.expand_radius > 0:
-                mask_A = expand(mask_A, self.expand_radius)
-                mask_A = Image.fromarray(mask_A)
+                mask_A_processed = expand(mask_A, self.expand_radius)
+                mask_A_processed = Image.fromarray(mask_A_processed)
+
             # apply image transformation to match transform_A and add gaussian blur
-            mask_A = 255 - self.transform_mask_A(mask_A)
-            
-            return {'A': A, 'B': B, 'mask_A': mask_A, 'A_paths': A_path, 'B_paths': B_path, 'mask_A_path': mask_A_path}
+            mask_A_processed = 255 - self.transform_mask_A_to_blurred(mask_A_processed)
+            output['mask_A_processed'] = mask_A_processed
+        
+        if 'encoding' in self.bg_dc:
+            output['mask_A'] = self.transform_mask_A_base(mask_A)
 
-
-        return {'A': A, 'B': B, 'A_paths': A_path, 'B_paths': B_path}
-
+        return output
+        
     def __len__(self):
         """Return the total number of images in the dataset.
 
