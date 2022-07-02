@@ -36,6 +36,6 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--bg_dc_expand_radius', type=int, default=3, help='how many pixels to expand the seg masks by before applying the gaussian filter used to blur the synth ped mask to simulate decaying data consistency.')
         parser.add_argument('--bg_dc_loss_type', type=str, choices=['L1', 'L2'], default='L2', help='which loss to use for the background data consistency.')
         parser.add_argument('--bg_dc_loss_weight', type=float, default=1, help='scaling factor to multiply background data consistency loss by.')
-
+        parser.add_argument('--bg_dc_encoding_loss_weight', type=float, default=25, help='scaling factor to multiply segmentation mask loss by.')
         self.isTrain = True
         return parser

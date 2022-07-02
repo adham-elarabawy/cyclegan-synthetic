@@ -75,6 +75,11 @@ class CycleGANModel(BaseModel):
             self.input_nc = opt.input_nc + 1
             self.output_nc = opt.output_nc
             visual_names_A.append('mask_A')
+            visual_names_A.append('rec_A_mask')
+            visual_names_A.append('fake_A_mask')
+            visual_names_B.append('idt_B_mask')
+            self.loss_names.append('identity_seg')
+            self.loss_names.append('recon_seg')
 
         self.visual_names = visual_names_A + visual_names_B  # combine visualizations for A and B
 
@@ -101,6 +106,7 @@ class CycleGANModel(BaseModel):
             self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)  # define GAN loss.
             self.criterionCycle = torch.nn.L1Loss()
             self.criterionIdt = torch.nn.L1Loss()
+            self.criterionSeg = torch.nn.L1Loss()
             if 'loss' in self.bg_dc:
                 if opt.bg_dc_loss_type == 'L1':
                     self.criterion_BG_DC = torch.nn.L1Loss(reduction='none')
@@ -113,6 +119,7 @@ class CycleGANModel(BaseModel):
             self.optimizers.append(self.optimizer_D)
 
             self.bg_dc_loss_weight = opt.bg_dc_loss_weight
+            self.bg_dc_encoding_loss_weight = opt.bg_dc_encoding_loss_weight
 
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
@@ -133,10 +140,22 @@ class CycleGANModel(BaseModel):
 
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-        self.fake_B = self.netG_A(self.real_A)  # G_A(A)
-        self.rec_A = self.netG_B(self.fake_B)   # G_B(G_A(A))
-        self.fake_A = self.netG_B(self.real_B)  # G_B(B)
-        self.rec_B = self.netG_A(self.fake_A)   # G_A(G_B(B))
+        if 'encoding' in self.bg_dc:
+            self.real_A_with_mask = torch.cat((self.real_A, self.mask_A), dim=1)
+
+            self.fake_B = self.netG_A(self.real_A_with_mask) # G_A(A_with_mask)
+            self.rec_A_with_mask = self.netG_B(self.fake_B)
+            self.rec_A = self.rec_A_with_mask[:,:3,:,:]
+            self.rec_A_mask = self.rec_A_with_mask[:,3:,:,:]
+            self.fake_A_with_mask = self.netG_B(self.real_B)
+            self.fake_A = self.fake_A_with_mask[:,:3,:,:]
+            self.fake_A_mask = self.fake_A_with_mask[:,3:,:,:]
+            self.rec_B = self.netG_A(self.fake_A_with_mask)
+        else:
+            self.fake_B = self.netG_A(self.real_A)  # G_A(A)
+            self.rec_A = self.netG_B(self.fake_B)   # G_B(G_A(A))
+            self.fake_A = self.netG_B(self.real_B)  # G_B(B)
+            self.rec_B = self.netG_A(self.fake_A)   # G_A(G_B(B))
 
     def backward_D_basic(self, netD, real, fake):
         """Calculate GAN loss for the discriminator
@@ -178,10 +197,16 @@ class CycleGANModel(BaseModel):
         # Identity loss
         if lambda_idt > 0:
             # G_A should be identity if real_B is fed: ||G_A(B) - B||
-            self.idt_A = self.netG_A(self.real_B)
+            if 'encoding' in self.bg_dc:
+                self.idt_A = self.netG_A(torch.cat((self.real_B, self.fake_A_mask), dim=1))
+            else:
+                self.idt_A = self.netG_A(self.real_B)
             self.loss_idt_A = self.criterionIdt(self.idt_A, self.real_B) * lambda_B * lambda_idt
             # G_B should be identity if real_A is fed: ||G_B(A) - A||
             self.idt_B = self.netG_B(self.real_A)
+            if 'encoding' in self.bg_dc:
+                self.idt_B_mask = self.idt_B[:,3:,:,:]
+                self.idt_B = self.idt_B[:,:3,:,:]
             self.loss_idt_B = self.criterionIdt(self.idt_B, self.real_A) * lambda_A * lambda_idt
         else:
             self.loss_idt_A = 0
@@ -196,13 +221,17 @@ class CycleGANModel(BaseModel):
         # Backward cycle loss || G_A(G_B(B)) - B||
         self.loss_cycle_B = self.criterionCycle(self.rec_B, self.real_B) * lambda_B
         # Background Data Consistency Loss
+        self.loss_bg_dc = 0
         if 'loss' in self.bg_dc:
             self.loss_bg_dc = self.criterion_BG_DC(self.fake_B, self.real_A) * self.mask_A_processed
             self.loss_bg_dc = torch.mean(self.loss_bg_dc)
-        else:
-            self.loss_bg_dc = 0
+        self.loss_identity_seg = 0
+        self.loss_recon_seg = 0
+        if 'encoding' in self.bg_dc:
+            self.loss_identity_seg = self.criterionSeg(self.mask_A, self.idt_B_mask)
+            self.loss_recon_seg = self.criterionSeg(self.mask_A, self.rec_A_mask)
         # combined loss and calculate gradients
-        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B + (self.bg_dc_loss_weight * self.loss_bg_dc)
+        self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B + (self.bg_dc_loss_weight * self.loss_bg_dc) + self.bg_dc_encoding_loss_weight * (self.loss_identity_seg + self.loss_recon_seg)
         self.loss_G.backward()
 
     def optimize_parameters(self):

@@ -51,7 +51,7 @@ class UnalignedDataset(BaseDataset):
         output_nc = self.opt.input_nc if btoA else self.opt.output_nc      # get the number of channels of output image
         self.transform_A = get_transform(self.opt, grayscale=(input_nc == 1))
         self.transform_B = get_transform(self.opt, grayscale=(output_nc == 1))
-        self.transform_mask = get_transform(self.opt, grayscale=True, convert=True, normalize=False)
+        self.transform_mask = get_transform(self.opt, grayscale=False, convert=True, normalize=False)
 
         if len(self.bg_dc) > 0:
             self.dir_mask_A = os.path.join(opt.dataroot, 'maskA') # create a path '/path/to/data/maskA'
@@ -103,10 +103,10 @@ class UnalignedDataset(BaseDataset):
 
             # apply image transformation to match transform_A and add gaussian blur
             mask_A_processed = 255 - self.transform_mask_A_to_blurred(mask_A_processed)
-            output['mask_A_processed'] = mask_A_processed
+            output['mask_A_processed'] = mask_A_processed[:1,:,:]
         
         if 'encoding' in self.bg_dc:
-            output['mask_A'] = self.transform_mask_A_base(mask_A)
+            output['mask_A'] = self.transform_mask_A_base(mask_A)[:1,:,:]
 
         return output
         
