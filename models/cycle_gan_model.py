@@ -229,11 +229,13 @@ class CycleGANModel(BaseModel):
         self.loss_identity_seg = 0
         self.loss_recon_seg = 0
         if 'encoding' in self.bg_dc:
+            self.set_requires_grad([self.netG_A], False)
             self.loss_identity_seg = self.criterionSeg(self.mask_A, self.idt_B_mask)
             self.loss_recon_seg = self.criterionSeg(self.mask_A, self.rec_A_mask)
 
             self.loss_identity_seg *= self.bg_dc_encoding_loss_weight
             self.loss_recon_seg *= self.bg_dc_encoding_loss_weight
+            self.set_requires_grad([self.netG_A], True)
             
         # combined loss and calculate gradients
         self.loss_G = self.loss_G_A + self.loss_G_B + self.loss_cycle_A + self.loss_cycle_B + self.loss_idt_A + self.loss_idt_B + self.loss_bg_dc + self.loss_identity_seg + self.loss_recon_seg
