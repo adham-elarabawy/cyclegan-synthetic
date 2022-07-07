@@ -16,9 +16,11 @@ class SingleDataset(BaseDataset):
             opt (Option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         BaseDataset.__init__(self, opt)
+        self.bg_dc = opt.bg_dc.split('_')
         self.A_paths = sorted(make_dataset(opt.dataroot, opt.max_dataset_size))
         input_nc = self.opt.output_nc if self.opt.direction == 'BtoA' else self.opt.input_nc
         self.transform = get_transform(opt, grayscale=(input_nc == 1))
+        self.transform_mask = get_transform(self.opt, grayscale=False, convert=True, normalize=False)
 
     def __getitem__(self, index):
         """Return a data point and its metadata information.
@@ -33,8 +35,14 @@ class SingleDataset(BaseDataset):
         A_path = self.A_paths[index]
         A_img = Image.open(A_path).convert('RGB')
         A = self.transform(A_img)
-        return {'A': A, 'A_paths': A_path}
-
+        output = {'A': A, 'A_paths': A_path}
+        if 'encoding' in self.bg_dc:
+            mask_path = A_path.replace('trainA', 'maskA')
+            mask_A = Image.open(mask_path).convert('RGB')
+            mask_A = self.transform_mask(mask_A)[:1,:,:]
+            output['mask_A'] = mask_A
+        return output
+        
     def __len__(self):
         """Return the total number of images in the dataset."""
         return len(self.A_paths)
