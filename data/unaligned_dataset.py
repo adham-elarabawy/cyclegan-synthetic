@@ -100,6 +100,8 @@ class UnalignedDataset(BaseDataset):
             if self.expand_radius > 0:
                 mask_A_processed = expand(mask_A, self.expand_radius)
                 mask_A_processed = Image.fromarray(mask_A_processed)
+            else:
+                mask_A_processed = mask_A
 
             # apply image transformation to match transform_A and add gaussian blur
             mask_A_processed = 255 - self.transform_mask_A_to_blurred(mask_A_processed)

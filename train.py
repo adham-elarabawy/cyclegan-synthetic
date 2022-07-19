@@ -27,6 +27,7 @@ from torch.utils.tensorboard import SummaryWriter
 import os
 import numpy as np
 import datetime
+from torchinfo import summary
 
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
@@ -43,6 +44,9 @@ if __name__ == '__main__':
     img_dir = os.path.join(opt.checkpoints_dir, opt.name, 'images')
     util.mkdir(img_dir)
 
+    summary(model.netD_A, input_size = (1, 3, 256, 256))
+
+
     for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
         epoch_start_time = time.time()  # timer for entire epoch
         iter_data_time = time.time()    # timer for data loading per iteration
@@ -57,7 +61,6 @@ if __name__ == '__main__':
             epoch_iter += opt.batch_size
             model.set_input(data)         # unpack data from dataset and apply preprocessing
             model.optimize_parameters()   # calculate loss functions, get gradients, update network weights
-
             if total_iters % opt.display_freq == 0:   # save images to disk every opt.display_freq iterations
                 model.compute_visuals()
                 visuals = model.get_current_visuals()

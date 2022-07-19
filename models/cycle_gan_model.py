@@ -67,13 +67,15 @@ class CycleGANModel(BaseModel):
         else:  # during test time, only load Gs
             self.model_names = ['G_A', 'G_B']
 
+        self.input_nc = opt.input_nc
+        self.output_nc = opt.output_nc
+
         if 'loss' in self.bg_dc:
             self.loss_names.append('bg_dc')
             visual_names_A.append('mask_A_processed')
 
         if 'encoding' in self.bg_dc:
-            self.input_nc = opt.input_nc + 1
-            self.output_nc = opt.output_nc
+            self.input_nc += 1
             visual_names_A.append('mask_A')
             visual_names_A.append('rec_A_mask')
             visual_names_A.append('fake_A_mask')

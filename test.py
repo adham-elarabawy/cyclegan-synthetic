@@ -30,13 +30,7 @@ import os
 from options.test_options import TestOptions
 from data import create_dataset
 from models import create_model
-from util.visualizer import save_images
 from util import util
-
-try:
-    import wandb
-except ImportError:
-    print('Warning: wandb package cannot be found. The option "--use_wandb" will result in error.')
 
 
 if __name__ == '__main__':

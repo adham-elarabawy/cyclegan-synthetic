@@ -44,6 +44,8 @@ class TestModel(BaseModel):
         self.visual_names = ['real', 'fake']
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
         self.model_names = ['G' + opt.model_suffix]  # only generator is needed.
+        self.input_nc = opt.input_nc
+        self.output_nc = opt.output_nc
         if 'encoding' in self.bg_dc:
             self.input_nc = opt.input_nc + 1
             self.output_nc = opt.output_nc
